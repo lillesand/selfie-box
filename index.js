@@ -1,27 +1,54 @@
 var s3 = require('s3');
 var ls = require('ls');
 var mv = require('mv');
+var watch = require('watch');
+var s = require("underscore.string");
+
 
 // Credentials are located in credentials file as per https://aws.amazon.com/sdk-for-node-js/
 var client = s3.createClient();
 
-var path = process.env['IMG_PATH'] || '/tmp/selfies';
-var imagePattern = path + '/*.jpg';
+const path = process.env['IMG_PATH'] || '/tmp/selfies/';
+const uploadingFolder = path + 'uploading/';
+const failedFolder = path + 'failed/';
+const uploadedFolder = path + 'uploaded/';
+const pathWithPattern = path + '*.jpg';
 
-if (ls(imagePattern).length === 0) {
-    console.log('No images found in ' + imagePattern)
+if (ls(pathWithPattern).length === 0) {
+    console.log('No images found in ' + pathWithPattern);
 }
 
-ls(imagePattern, {recursive:false}, function(file) {
-    var originalPath = file.full;
-    var uploadingPath = path + '/uploading/' + file.file;
-    var failedPath = path + '/failed/' + file.file;
-    var uploadedPath = path + '/uploaded/' + file.file;
+// Upload all existing files
+ls(pathWithPattern, { recursive:false }, function(file) {
+    uploadFile(file.full);
+});
 
+// Upload any files that appear
+watch.createMonitor(path, function (monitor) {
+    monitor.on("created", function (file) {
+        if (s(file).startsWith(uploadedFolder)
+            || s(file).startsWith(uploadingFolder)
+            || s(file).startsWith(failedFolder)) {
+            return;
+        }
+
+        uploadFile(file);
+    });
+});
+
+function uploadFile(file) {
+    if (!s(file).endsWith('.jpg')) return;
+
+    var originalPath = file;
+    var fileName = s(originalPath).strRightBack('/').value();
+    var uploadingPath = uploadingFolder + fileName;
+    var failedPath = failedFolder + fileName;
+    var uploadedPath = uploadedFolder + fileName;
+
+    console.log('Uploading ' + originalPath);
     mv(originalPath, uploadingPath, { mkdirp: true }, function(err) {
         if (err) {
-            console.error('Unable to copy file', err);
-            // Seriously bad news, do nothing.
+            console.error('Unable to move file from ' + originalPath + " to " + uploadingPath, err);
             return;
         }
 
@@ -30,7 +57,7 @@ ls(imagePattern, {recursive:false}, function(file) {
 
             s3Params: {
                 Bucket: 'lillesand-selfies',
-                Key: file.name
+                Key: fileName
             }
         });
 
@@ -42,8 +69,7 @@ ls(imagePattern, {recursive:false}, function(file) {
         });
 
         uploader.on('progress', function() {
-            console.log("progress", uploader.progressMd5Amount,
-                uploader.progressAmount, uploader.progressTotal);
+            //console.log("progress", uploader.progressMd5Amount, uploader.progressAmount, uploader.progressTotal);
         });
 
         uploader.on('end', function() {
@@ -53,6 +79,4 @@ ls(imagePattern, {recursive:false}, function(file) {
 
     });
 
-
-
-});
+}

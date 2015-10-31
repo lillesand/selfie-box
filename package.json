@@ -10,7 +10,9 @@
   "license": "ISC",
   "dependencies": {
     "mv": "^2.1.1",
-    "s3": "^4.4.0"
+    "s3": "^4.4.0",
+    "underscore.string": "^3.2.2",
+    "watch": "^0.16.0"
   },
   "devDependencies": {
     "ls": "^0.1.0"
